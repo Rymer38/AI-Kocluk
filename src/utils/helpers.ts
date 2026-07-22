@@ -384,12 +384,14 @@ export const storage = {
   saveUsers(users: UserAccount[]): void {
     try {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-      // Sync full array with server file
+      // Sync full array with server file if running on a full-stack server
       fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(users),
-      }).catch((e) => console.error('User sync error:', e));
+      }).catch(() => {
+        // Ignore fetch errors on static hosting like GitHub Pages
+      });
     } catch (e) {
       console.error('Failed to save users', e);
     }
@@ -398,13 +400,15 @@ export const storage = {
   async syncUsersWithServer(): Promise<UserAccount[]> {
     try {
       const res = await fetch('/api/users');
-      const data = await res.json();
-      if (data.users && Array.isArray(data.users) && data.users.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(data.users));
-        return data.users;
+      if (res.ok) {
+        const data = await res.json();
+        if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(data.users));
+          return data.users;
+        }
       }
-    } catch (e) {
-      console.error('Failed to sync users with server:', e);
+    } catch {
+      // Silently fall back to LocalStorage on static hosting like GitHub Pages
     }
     return this.getUsers();
   },
