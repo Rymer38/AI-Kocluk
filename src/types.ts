@@ -63,7 +63,7 @@ export interface TeacherPlaylist {
 export interface StudyTask {
   id: string;
   day: 'Pazartesi' | 'Salı' | 'Çarşamba' | 'Perşembe' | 'Cuma' | 'Cumartesi' | 'Pazar';
-  timeSlot: 'Sabah (09:00 - 12:00)' | 'Öğle (13:00 - 17:00)' | 'Akşam (18:00 - 22:00)';
+  timeSlot: 'Sabah (09:00 - 12:00)' | 'Öğle (13:00 - 17:00)' | 'Akşam (18:00 - 22:00)' | 'Gün İçi';
   subjectKey: SubjectKey;
   topic: string;
   description: string;
@@ -131,12 +131,30 @@ export interface UserAccount {
   passwordHash: string; // Hashed or encoded password
   role: 'admin' | 'student';
   createdAt: string;
+  rememberMe?: boolean;
   targetGoal?: TargetGoal;
   exams?: ExamRecord[];
   tasks?: StudyTask[];
   wrongQuestions?: WrongQuestionItem[];
   books?: BookResource[];
   playlists?: TeacherPlaylist[];
+}
+
+export interface VideoItem {
+  id: string;
+  title: string;
+  channelName?: string;
+  channel?: string;
+  youtubeUrl?: string;
+  youtubeId?: string;
+  durationText?: string;
+  duration?: string;
+  subjectKey: SubjectKey;
+  topic: string;
+  thumbnailUrl?: string;
+  type?: string;
+  viewsCount?: string;
+  difficulty?: string;
 }
 
 export interface BackupData {

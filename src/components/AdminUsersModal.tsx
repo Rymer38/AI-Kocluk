@@ -20,6 +20,14 @@ export const AdminUsersModal: React.FC<AdminUsersModalProps> = ({
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [msg, setMsg] = useState('');
 
+  React.useEffect(() => {
+    if (isOpen) {
+      storage.syncUsersWithServer().then((syncedUsers) => {
+        if (syncedUsers) setUsers(syncedUsers);
+      });
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.email === 'ekicia926@gmail.com' || currentUser?.username === 'admin';

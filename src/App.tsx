@@ -21,32 +21,53 @@ export default function App() {
   // User Authentication State
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => storage.getCurrentUser());
 
-  // State loaded from LocalStorage (or initial defaults)
-  const [exams, setExams] = useState<ExamRecord[]>(() => storage.getExams());
-  const [tasks, setTasks] = useState<StudyTask[]>(() => storage.getTasks());
-  const [targetGoal, setTargetGoal] = useState<TargetGoal>(() => storage.getTargetGoal());
+  // State loaded from LocalStorage (scoped per user)
+  const [exams, setExams] = useState<ExamRecord[]>(() => storage.getExams(currentUser?.id));
+  const [tasks, setTasks] = useState<StudyTask[]>(() => storage.getTasks(currentUser?.id));
+  const [targetGoal, setTargetGoal] = useState<TargetGoal>(() => storage.getTargetGoal(currentUser?.id));
   const [wrongQuestions, setWrongQuestions] = useState<WrongQuestionItem[]>(() =>
-    storage.getWrongQuestions()
+    storage.getWrongQuestions(currentUser?.id)
   );
   const [achievements, setAchievements] = useState<Achievement[]>(() =>
-    storage.getAchievements()
+    storage.getAchievements(currentUser?.id)
   );
+
+  // Sync users list with server on mount
+  React.useEffect(() => {
+    storage.syncUsersWithServer();
+  }, []);
+
+  // Update scoped state when logged-in user changes
+  React.useEffect(() => {
+    if (currentUser) {
+      setExams(storage.getExams(currentUser.id));
+      setTasks(storage.getTasks(currentUser.id));
+      setTargetGoal(storage.getTargetGoal(currentUser.id));
+      setWrongQuestions(storage.getWrongQuestions(currentUser.id));
+      setAchievements(storage.getAchievements(currentUser.id));
+    } else {
+      setExams([]);
+      setTasks([]);
+      setWrongQuestions([]);
+    }
+  }, [currentUser?.id]);
 
   // Modals
   const [isAddExamOpen, setIsAddExamOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(() => !storage.getCurrentUser());
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isBackupOpen, setIsBackupOpen] = useState(false);
 
   // Reload all state after JSON backup import
   const handleReloadAllState = () => {
-    setExams(storage.getExams());
-    setTasks(storage.getTasks());
-    setTargetGoal(storage.getTargetGoal());
-    setWrongQuestions(storage.getWrongQuestions());
-    setAchievements(storage.getAchievements());
-    setCurrentUser(storage.getCurrentUser());
+    const user = storage.getCurrentUser();
+    setCurrentUser(user);
+    setExams(storage.getExams(user?.id));
+    setTasks(storage.getTasks(user?.id));
+    setTargetGoal(storage.getTargetGoal(user?.id));
+    setWrongQuestions(storage.getWrongQuestions(user?.id));
+    setAchievements(storage.getAchievements(user?.id));
   };
 
   // Persist State Updates
@@ -57,34 +78,34 @@ export default function App() {
     };
     const updated = [...exams, examWithAnalysis];
     setExams(updated);
-    storage.saveExams(updated);
+    storage.saveExams(updated, currentUser?.id);
   };
 
   const handleDeleteExam = (examId: string) => {
     const updated = exams.filter((e) => e.id !== examId);
     setExams(updated);
-    storage.saveExams(updated);
+    storage.saveExams(updated, currentUser?.id);
   };
 
   const handleUpdateTasks = (updatedTasks: StudyTask[]) => {
     setTasks(updatedTasks);
-    storage.saveTasks(updatedTasks);
+    storage.saveTasks(updatedTasks, currentUser?.id);
   };
 
   const handleUpdateTargetGoal = (newGoal: TargetGoal) => {
     setTargetGoal(newGoal);
-    storage.saveTargetGoal(newGoal);
+    storage.saveTargetGoal(newGoal, currentUser?.id);
   };
 
   const handleSaveWrongQuestions = (items: WrongQuestionItem[]) => {
     setWrongQuestions(items);
-    storage.saveWrongQuestions(items);
+    storage.saveWrongQuestions(items, currentUser?.id);
   };
 
   const handleAddWrongQuestionSingle = (item: WrongQuestionItem) => {
     const updated = [item, ...wrongQuestions];
     setWrongQuestions(updated);
-    storage.saveWrongQuestions(updated);
+    storage.saveWrongQuestions(updated, currentUser?.id);
   };
 
   return (
@@ -146,6 +167,7 @@ export default function App() {
           <WrongQuestionNotebook
             wrongQuestions={wrongQuestions}
             onSaveWrongQuestions={handleSaveWrongQuestions}
+            exams={exams}
           />
         )}
 

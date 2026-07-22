@@ -22,17 +22,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   if (!isOpen) return null;
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
-    const allUsers = storage.getUsers();
+    // Fetch fresh users from server file first
+    const allUsers = await storage.syncUsersWithServer();
     const found = allUsers.find(
       (u) =>
         (u.username.toLowerCase() === username.trim().toLowerCase() ||
@@ -41,7 +43,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     );
 
     if (found) {
-      storage.saveCurrentUser(found);
+      storage.saveCurrentUser(found, rememberMe);
       onLoginSuccess(found);
       setSuccessMsg(`Hoş geldin, ${found.username}! Oturum başarıyla açıldı.`);
       setTimeout(() => {
@@ -52,7 +54,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -62,7 +64,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    const allUsers = storage.getUsers();
+    const allUsers = await storage.syncUsersWithServer();
     const exists = allUsers.some(
       (u) => u.username.toLowerCase() === username.trim().toLowerCase() || u.email.toLowerCase() === email.trim().toLowerCase()
     );
@@ -79,11 +81,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       passwordHash: password, // Store password
       role: username.toLowerCase() === 'admin' || email.toLowerCase() === 'ekicia926@gmail.com' ? 'admin' : 'student',
       createdAt: new Date().toISOString().split('T')[0],
+      rememberMe,
     };
 
     const updatedUsers = [...allUsers, newUser];
     storage.saveUsers(updatedUsers);
-    storage.saveCurrentUser(newUser);
+    storage.saveCurrentUser(newUser, rememberMe);
     onLoginSuccess(newUser);
     setSuccessMsg('Hesabınız başarıyla oluşturuldu ve oturum açıldı!');
     setTimeout(() => {
@@ -92,30 +95,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 rounded-[28px] max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-6">
         {/* Header */}
         <div className="flex items-center border-b border-slate-100 dark:border-slate-800 pb-4 gap-3">
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0"
-            title="Kapat"
-            aria-label="Kapat"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {currentUser && (
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0"
+              title="Kapat"
+              aria-label="Kapat"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
           <div className="flex items-center space-x-3 flex-1">
             <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 shrink-0">
               <User className="w-6 h-6" />
             </div>
             <div>
               <h3 className="font-black text-lg text-slate-900 dark:text-white">
-                {currentUser ? 'Hesap Profilim' : mode === 'login' ? 'Oturum Aç' : 'Yeni Kayıt Ol'}
+                {currentUser ? 'Hesap Profilim' : mode === 'login' ? 'Giriş Yap' : 'Yeni Kayıt Ol'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {currentUser
                   ? 'Çalışma verilerinize tüm cihazlardan erişin'
-                  : 'Arkadaşlarınla çalışma programını güvenle paylaş'}
+                  : 'YKS Takip Sistemine Erişmek İçin Giriş Yapın'}
               </p>
             </div>
           </div>
@@ -244,6 +249,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 outline-none"
                     />
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center space-x-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-700"
+                    />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Beni Hatırla
+                    </span>
+                  </label>
+                  <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                    Güvenli Oturum
+                  </span>
                 </div>
 
                 <div className="pt-2">

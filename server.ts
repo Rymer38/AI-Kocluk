@@ -1,8 +1,9 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,7 +14,53 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '20mb' }));
+
+// File storage configuration for user accounts
+const DATA_DIR = path.join(__dirname, 'data');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+
+function ensureUsersFile() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(USERS_FILE)) {
+    const defaultUsers = [
+      {
+        id: 'usr-admin',
+        username: 'admin',
+        email: 'ekicia926@gmail.com',
+        passwordHash: 'admin123',
+        role: 'admin',
+        createdAt: '2026-07-21',
+      },
+      {
+        id: 'usr-student-1',
+        username: 'Ahmet_YKS2027',
+        email: 'ahmet@yks.com',
+        passwordHash: '123456',
+        role: 'student',
+        createdAt: '2026-07-20',
+      },
+    ];
+    fs.writeFileSync(USERS_FILE, JSON.stringify(defaultUsers, null, 2), 'utf-8');
+  }
+}
+
+function getUsersFromFile() {
+  ensureUsersFile();
+  try {
+    const raw = fs.readFileSync(USERS_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+function saveUsersToFile(users: any[]) {
+  ensureUsersFile();
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+}
 
 // Lazy initializer for Gemini client
 function getGeminiAI() {
@@ -30,6 +77,137 @@ function getGeminiAI() {
     },
   });
 }
+
+// User Persistence API Endpoints
+app.get('/api/users', (req, res) => {
+  const users = getUsersFromFile();
+  res.json({ users });
+});
+
+app.post('/api/users', (req, res) => {
+  const body = req.body;
+  const existingUsers = getUsersFromFile();
+
+  if (Array.isArray(body)) {
+    saveUsersToFile(body);
+    return res.json({ success: true, users: body });
+  }
+
+  if (body && body.users && Array.isArray(body.users)) {
+    saveUsersToFile(body.users);
+    return res.json({ success: true, users: body.users });
+  }
+
+  const newUser = body;
+  if (!newUser || (!newUser.username && !newUser.id)) {
+    return res.status(400).json({ error: 'Geçersiz kullanıcı verisi.' });
+  }
+
+  const exists = existingUsers.some(
+    (u: any) =>
+      u.id === newUser.id ||
+      (newUser.username && u.username.toLowerCase() === newUser.username.trim().toLowerCase())
+  );
+
+  let updated;
+  if (exists) {
+    updated = existingUsers.map((u: any) =>
+      u.id === newUser.id || (newUser.username && u.username.toLowerCase() === newUser.username.trim().toLowerCase())
+        ? { ...u, ...newUser }
+        : u
+    );
+  } else {
+    updated = [...existingUsers, newUser];
+  }
+
+  saveUsersToFile(updated);
+  res.json({ success: true, users: updated });
+});
+
+app.put('/api/users/:id', (req, res) => {
+  const { id } = req.params;
+  const updateData = req.body;
+  const users = getUsersFromFile();
+
+  const updated = users.map((u: any) => (u.id === id ? { ...u, ...updateData } : u));
+  saveUsersToFile(updated);
+  res.json({ success: true, users: updated });
+});
+
+app.delete('/api/users/:id', (req, res) => {
+  const { id } = req.params;
+  const users = getUsersFromFile();
+  const updated = users.filter((u: any) => u.id !== id);
+  saveUsersToFile(updated);
+  res.json({ success: true, users: updated });
+});
+
+// Gemini Multimodal Vision API Endpoint for Analyzing Wrong Question Photo
+app.post('/api/ai/analyze-wrong-question-image', async (req, res) => {
+  try {
+    const { imageBase64, mimeType = 'image/jpeg', examTitle = 'TYT Denemesi' } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Görsel verisi eksik.' });
+    }
+
+    const ai = getGeminiAI();
+
+    // Clean base64 header if present
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+
+    const promptText = `
+Sen YKS ve TYT soru analizi uzmanı bir yapay zekasın.
+Aşağıda öğrencinin "${examTitle}" deneme sınavından fotoğrafını çektiği yanlış veya boş bıraktığı bir soru görseli bulunmaktadır.
+
+Görseli detaylıca incele ve şu bilgileri tespit ederek JSON formatında döndür:
+1. "subjectKey": Ders kategorisi. Yalnızca şu 4 değerden biri olmalıdır: 'matematik' | 'turkce' | 'fen' | 'sosyal'.
+2. "topic": Sorunun tam alt konusu (Örn: "Köklü Sayılar", "Paragrafta Ana Düşünce", "Üçgenlerde Eşlik ve Benzerlik", "Optik ve Kırılma", "Mol Kavramı", "Tarih Bilimine Giriş" vb.).
+3. "questionText": Görseldeki soru metninin kısa ve net özeti / soru kökü.
+4. "correctAnswerText": Sorunun adım adım ayrıntılı doğru çözümü ve şık cevabı.
+5. "notes": Öğrencinin bir daha bu hatayı yapmaması için unutmaması gereken 1 cümlelik altın ipucu / püf nokta notu.
+
+JSON FORMATI (Başka hiçbir metin yazma, sadece bu JSON nesnesini döndür):
+{
+  "subjectKey": "matematik",
+  "topic": "Köklü Sayılar",
+  "questionText": "Sorunun özeti...",
+  "correctAnswerText": "Adım adım çözüm açıklaması...",
+  "notes": "Püf nokta ipucu..."
+}
+`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: [
+        {
+          inlineData: {
+            mimeType,
+            data: cleanBase64,
+          },
+        },
+        promptText,
+      ],
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    let result = {};
+    try {
+      result = JSON.parse(response.text || '{}');
+    } catch {
+      result = {};
+    }
+
+    res.json({ analysis: result });
+  } catch (err: any) {
+    console.error('Analyze Wrong Question Image Error:', err);
+    res.status(500).json({
+      error: 'Fotoğraf analiz edilirken bir hata oluştu.',
+      details: err?.message || 'Görsel okunamadı',
+    });
+  }
+});
 
 // API Routes
 

@@ -242,82 +242,100 @@ const STORAGE_KEYS = {
 };
 
 export const storage = {
-  getExams(): ExamRecord[] {
+  getKey(baseKey: string, userId?: string): string {
+    return userId ? `${baseKey}_${userId}` : baseKey;
+  },
+
+  getExams(userId?: string): ExamRecord[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.EXAMS);
-      return data ? JSON.parse(data) : SAMPLE_EXAMS;
-    } catch {
+      const key = this.getKey(STORAGE_KEYS.EXAMS, userId);
+      const data = localStorage.getItem(key);
+      if (data) return JSON.parse(data);
+      if (userId && userId !== 'usr-student-1' && userId !== 'usr-admin') {
+        return [];
+      }
       return SAMPLE_EXAMS;
+    } catch {
+      return userId && userId !== 'usr-student-1' && userId !== 'usr-admin' ? [] : SAMPLE_EXAMS;
     }
   },
-  saveExams(exams: ExamRecord[]): void {
+  saveExams(exams: ExamRecord[], userId?: string): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+      const key = this.getKey(STORAGE_KEYS.EXAMS, userId);
+      localStorage.setItem(key, JSON.stringify(exams));
     } catch (e) {
       console.error('Failed to save exams', e);
     }
   },
 
-  getTasks(): StudyTask[] {
+  getTasks(userId?: string): StudyTask[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.TASKS);
+      const key = this.getKey(STORAGE_KEYS.TASKS, userId);
+      const data = localStorage.getItem(key);
       const parsed = data ? JSON.parse(data) : INITIAL_STUDY_TASKS;
       return ensureFixedDailyRoutines(parsed);
     } catch {
       return ensureFixedDailyRoutines(INITIAL_STUDY_TASKS);
     }
   },
-  saveTasks(tasks: StudyTask[]): void {
+  saveTasks(tasks: StudyTask[], userId?: string): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+      const key = this.getKey(STORAGE_KEYS.TASKS, userId);
+      localStorage.setItem(key, JSON.stringify(tasks));
     } catch (e) {
       console.error('Failed to save tasks', e);
     }
   },
 
-  getTargetGoal(): TargetGoal {
+  getTargetGoal(userId?: string): TargetGoal {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.TARGET);
+      const key = this.getKey(STORAGE_KEYS.TARGET, userId);
+      const data = localStorage.getItem(key);
       return data ? JSON.parse(data) : INITIAL_TARGET_GOAL;
     } catch {
       return INITIAL_TARGET_GOAL;
     }
   },
-  saveTargetGoal(goal: TargetGoal): void {
+  saveTargetGoal(goal: TargetGoal, userId?: string): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.TARGET, JSON.stringify(goal));
+      const key = this.getKey(STORAGE_KEYS.TARGET, userId);
+      localStorage.setItem(key, JSON.stringify(goal));
     } catch (e) {
       console.error('Failed to save target goal', e);
     }
   },
 
-  getWrongQuestions(): WrongQuestionItem[] {
+  getWrongQuestions(userId?: string): WrongQuestionItem[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.WRONG_QUESTIONS);
+      const key = this.getKey(STORAGE_KEYS.WRONG_QUESTIONS, userId);
+      const data = localStorage.getItem(key);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
     }
   },
-  saveWrongQuestions(items: WrongQuestionItem[]): void {
+  saveWrongQuestions(items: WrongQuestionItem[], userId?: string): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.WRONG_QUESTIONS, JSON.stringify(items));
+      const key = this.getKey(STORAGE_KEYS.WRONG_QUESTIONS, userId);
+      localStorage.setItem(key, JSON.stringify(items));
     } catch (e) {
       console.error('Failed to save wrong questions', e);
     }
   },
 
-  getAchievements(): Achievement[] {
+  getAchievements(userId?: string): Achievement[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.ACHIEVEMENTS);
+      const key = this.getKey(STORAGE_KEYS.ACHIEVEMENTS, userId);
+      const data = localStorage.getItem(key);
       return data ? JSON.parse(data) : INITIAL_ACHIEVEMENTS;
     } catch {
       return INITIAL_ACHIEVEMENTS;
     }
   },
-  saveAchievements(achievements: Achievement[]): void {
+  saveAchievements(achievements: Achievement[], userId?: string): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(achievements));
+      const key = this.getKey(STORAGE_KEYS.ACHIEVEMENTS, userId);
+      localStorage.setItem(key, JSON.stringify(achievements));
     } catch (e) {
       console.error('Failed to save achievements', e);
     }
@@ -366,25 +384,61 @@ export const storage = {
   saveUsers(users: UserAccount[]): void {
     try {
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      // Sync full array with server file
+      fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(users),
+      }).catch((e) => console.error('User sync error:', e));
     } catch (e) {
       console.error('Failed to save users', e);
     }
   },
 
+  async syncUsersWithServer(): Promise<UserAccount[]> {
+    try {
+      const res = await fetch('/api/users');
+      const data = await res.json();
+      if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(data.users));
+        return data.users;
+      }
+    } catch (e) {
+      console.error('Failed to sync users with server:', e);
+    }
+    return this.getUsers();
+  },
+
   getCurrentUser(): UserAccount | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-      return data ? JSON.parse(data) : DEFAULT_USERS[0]; // Default to admin or logged in
+      // 1. Check localStorage (Remember Me = true)
+      const localData = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+      if (localData) return JSON.parse(localData);
+
+      // 2. Check sessionStorage (Remember Me = false)
+      const sessionData = sessionStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+      if (sessionData) return JSON.parse(sessionData);
+
+      return null; // Force mandatory login on app startup
     } catch {
-      return DEFAULT_USERS[0];
+      return null;
     }
   },
-  saveCurrentUser(user: UserAccount | null): void {
+
+  saveCurrentUser(user: UserAccount | null, rememberMe: boolean = true): void {
     try {
       if (user) {
-        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+        const userWithRemember = { ...user, rememberMe };
+        if (rememberMe) {
+          localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(userWithRemember));
+          sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        } else {
+          sessionStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(userWithRemember));
+          localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        }
       } else {
         localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       }
     } catch (e) {
       console.error('Failed to save current user', e);
