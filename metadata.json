@@ -1,0 +1,6 @@
+{
+  "name": "YKS TYT Deneme Analiz & Koçluk",
+  "description": "Yapay zeka destekli TYT deneme analizi, performans takibi, dinamik çalışma programı ve özel video önerileri uygulaması.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

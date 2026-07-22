@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Bento card subtle grid pattern background support */
+.bento-card-bg {
+  background-image: radial-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
